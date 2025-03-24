@@ -1,4 +1,3 @@
-
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import { toast } from "sonner";
 
@@ -16,6 +15,9 @@ export interface PurchaseRecord {
   quantity: number;
   cost: number;
   date: string;
+  notes?: string;
+  deliveryMethod?: 'pickup' | 'delivery' | 'digital';
+  paymentStatus?: 'pending' | 'paid' | 'partial';
 }
 
 export interface SaleRecord {
@@ -25,6 +27,8 @@ export interface SaleRecord {
   quantity: number;
   price: number;
   date: string;
+  notes?: string;
+  paymentStatus?: 'pending' | 'paid' | 'partial';
 }
 
 interface StockItem {
@@ -50,6 +54,7 @@ interface InvoiceContextType {
   getPurchase: (id: string) => PurchaseRecord | undefined;
   getProductStock: (productId: string) => number;
   getMonthlyEarnings: (month: number, year: number) => { revenue: number; costs: number; profit: number };
+  getPendingPayments: () => { purchases: PurchaseRecord[]; sales: SaleRecord[] };
 }
 
 const defaultProducts: Product[] = [
@@ -76,7 +81,6 @@ const defaultSales: SaleRecord[] = [
   { id: '5', customerName: 'David Brown', productId: '5', quantity: 2, price: 300, date: '2023-07-25' },
 ];
 
-// Create context with default values
 const InvoiceContext = createContext<InvoiceContextType>({
   products: [],
   purchases: [],
@@ -95,10 +99,10 @@ const InvoiceContext = createContext<InvoiceContextType>({
   getPurchase: () => undefined,
   getProductStock: () => 0,
   getMonthlyEarnings: () => ({ revenue: 0, costs: 0, profit: 0 }),
+  getPendingPayments: () => ({ purchases: [], sales: [] }),
 });
 
 export const InvoiceProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // Load data from localStorage or use defaults
   const [products, setProducts] = useState<Product[]>(() => {
     const saved = localStorage.getItem('products');
     return saved ? JSON.parse(saved) : defaultProducts;
@@ -114,26 +118,21 @@ export const InvoiceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return saved ? JSON.parse(saved) : defaultSales;
   });
 
-  // Calculate stock based on purchases and sales
   const [stock, setStock] = useState<StockItem[]>([]);
 
-  // Save to localStorage when data changes
   useEffect(() => {
     localStorage.setItem('products', JSON.stringify(products));
     localStorage.setItem('purchases', JSON.stringify(purchases));
     localStorage.setItem('sales', JSON.stringify(sales));
   }, [products, purchases, sales]);
 
-  // Calculate stock whenever purchases or sales change
   useEffect(() => {
     const newStock: StockItem[] = [];
     
-    // Add all products to stock with quantity 0
     products.forEach(product => {
       newStock.push({ productId: product.id, quantity: 0 });
     });
     
-    // Add quantities from purchases
     purchases.forEach(purchase => {
       const stockItem = newStock.find(item => item.productId === purchase.productId);
       if (stockItem) {
@@ -141,7 +140,6 @@ export const InvoiceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       }
     });
     
-    // Subtract quantities from sales
     sales.forEach(sale => {
       const stockItem = newStock.find(item => item.productId === sale.productId);
       if (stockItem) {
@@ -164,7 +162,6 @@ export const InvoiceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   const deleteProduct = (id: string) => {
-    // Check if product is used in purchases or sales
     const usedInPurchase = purchases.some(p => p.productId === id);
     const usedInSale = sales.some(s => s.productId === id);
     
@@ -194,7 +191,6 @@ export const InvoiceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   const addSale = (sale: Omit<SaleRecord, 'id'>) => {
-    // Check if there's enough stock
     const stockItem = stock.find(item => item.productId === sale.productId);
     if (!stockItem || stockItem.quantity < sale.quantity) {
       toast.error('Not enough stock to complete this sale');
@@ -207,14 +203,11 @@ export const InvoiceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   const updateSale = (sale: SaleRecord) => {
-    // Get the original sale
     const originalSale = sales.find(s => s.id === sale.id);
     if (!originalSale) return;
     
-    // Calculate difference in quantity
     const quantityDifference = sale.quantity - originalSale.quantity;
     
-    // Check if there's enough stock for the increased quantity
     if (quantityDifference > 0) {
       const stockItem = stock.find(item => item.productId === sale.productId);
       if (!stockItem || stockItem.quantity < quantityDifference) {
@@ -242,7 +235,6 @@ export const InvoiceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   const getMonthlyEarnings = (month: number, year: number) => {
-    // Filter purchases and sales by month and year
     const monthPurchases = purchases.filter(p => {
       const date = new Date(p.date);
       return date.getMonth() === month && date.getFullYear() === year;
@@ -253,7 +245,6 @@ export const InvoiceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       return date.getMonth() === month && date.getFullYear() === year;
     });
     
-    // Calculate total costs and revenue
     const costs = monthPurchases.reduce((total, p) => total + (p.cost * p.quantity), 0);
     const revenue = monthSales.reduce((total, s) => total + (s.price * s.quantity), 0);
     
@@ -261,6 +252,16 @@ export const InvoiceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       costs,
       revenue,
       profit: revenue - costs
+    };
+  };
+
+  const getPendingPayments = () => {
+    const pendingPurchases = purchases.filter(p => p.paymentStatus === 'pending' || p.paymentStatus === 'partial');
+    const pendingSales = sales.filter(s => s.paymentStatus === 'pending' || s.paymentStatus === 'partial');
+    
+    return {
+      purchases: pendingPurchases,
+      sales: pendingSales
     };
   };
 
@@ -281,7 +282,8 @@ export const InvoiceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     getProduct,
     getPurchase,
     getProductStock,
-    getMonthlyEarnings
+    getMonthlyEarnings,
+    getPendingPayments
   };
 
   return (
