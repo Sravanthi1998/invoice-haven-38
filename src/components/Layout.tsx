@@ -32,7 +32,7 @@ const Layout: React.FC<LayoutProps> = ({ children, title, subtitle }) => {
         <div className="flex items-center justify-between w-full">
           <div className="flex items-center">
             <PackageOpen className="h-7 w-7 text-accent mr-2" />
-            <h1 className="text-xl font-medium">Invoice Haven</h1>
+            <h1 className="text-xl font-medium">Purchase Invoice Management</h1>
           </div>
         </div>
       </header>
